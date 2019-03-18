@@ -80,12 +80,15 @@ namespace boost
         struct thread_exit_callback_node;
         struct tss_data_node
         {
-            boost::shared_ptr<boost::detail::tss_cleanup_function> func;
+            typedef void(*cleanup_func_t)(void*);
+            typedef void(*cleanup_caller_t)(cleanup_func_t, void*);
+
+            cleanup_caller_t caller;
+            cleanup_func_t func;
             void* value;
 
-            tss_data_node(boost::shared_ptr<boost::detail::tss_cleanup_function> func_,
-                          void* value_):
-                func(func_),value(value_)
+            tss_data_node(cleanup_caller_t caller_,cleanup_func_t func_,void* value_):
+                caller(caller_),func(func_),value(value_)
             {}
         };
 
@@ -113,8 +116,10 @@ namespace boost
             > notify_list_t;
             notify_list_t notify;
 
+//#ifndef BOOST_NO_EXCEPTIONS
             typedef std::vector<shared_ptr<shared_state_base> > async_states_t;
             async_states_t async_states_;
+//#endif
 //#if defined BOOST_THREAD_PROVIDES_INTERRUPTIONS
             // These data must be at the end so that the access to the other fields doesn't change
             // when BOOST_THREAD_PROVIDES_INTERRUPTIONS is defined
@@ -129,8 +134,10 @@ namespace boost
                 thread_exit_callbacks(0),
                 id(0),
                 tss_data(),
-                notify(),
-                async_states_()
+                notify()
+//#ifndef BOOST_NO_EXCEPTIONS
+                , async_states_()
+//#endif
 //#if defined BOOST_THREAD_PROVIDES_INTERRUPTIONS
                 , interruption_handle(create_anonymous_event(detail::win32::manual_reset_event,detail::win32::event_initially_reset))
                 , interruption_enabled(true)
@@ -166,11 +173,12 @@ namespace boost
               notify.push_back(std::pair<condition_variable*, mutex*>(cv, m));
             }
 
+//#ifndef BOOST_NO_EXCEPTIONS
             void make_ready_at_thread_exit(shared_ptr<shared_state_base> as)
             {
               async_states_.push_back(as);
             }
-
+//#endif
         };
         BOOST_THREAD_DECL thread_data_base* get_current_thread_data();
 
@@ -185,7 +193,7 @@ namespace boost
 
 #if defined BOOST_THREAD_USES_DATETIME
         template<typename TimeDuration>
-        inline BOOST_SYMBOL_VISIBLE void sleep(TimeDuration const& rel_time)
+        BOOST_SYMBOL_VISIBLE void sleep(TimeDuration const& rel_time)
         {
           interruptible_wait(detail::win32::invalid_handle_value, detail::internal_platform_clock::now() + detail::platform_duration(rel_time));
         }
@@ -205,19 +213,19 @@ namespace boost
 
 #ifdef BOOST_THREAD_USES_CHRONO
         template <class Rep, class Period>
-        inline void sleep_for(const chrono::duration<Rep, Period>& d)
+        void sleep_for(const chrono::duration<Rep, Period>& d)
         {
           interruptible_wait(detail::win32::invalid_handle_value, detail::internal_platform_clock::now() + detail::platform_duration(d));
         }
 
         template <class Duration>
-        inline void sleep_until(const chrono::time_point<chrono::steady_clock, Duration>& t)
+        void sleep_until(const chrono::time_point<chrono::steady_clock, Duration>& t)
         {
           sleep_for(t - chrono::steady_clock::now());
         }
 
         template <class Clock, class Duration>
-        inline void sleep_until(const chrono::time_point<Clock, Duration>& t)
+        void sleep_until(const chrono::time_point<Clock, Duration>& t)
         {
           typedef typename common_type<Duration, typename Clock::duration>::type common_duration;
           common_duration d(t - Clock::now());
@@ -236,7 +244,7 @@ namespace boost
 
 #if defined BOOST_THREAD_USES_DATETIME
           template<typename TimeDuration>
-          inline BOOST_SYMBOL_VISIBLE void sleep(TimeDuration const& rel_time)
+          BOOST_SYMBOL_VISIBLE void sleep(TimeDuration const& rel_time)
           {
             non_interruptible_wait(detail::win32::invalid_handle_value, detail::internal_platform_clock::now() + detail::platform_duration(rel_time));
           }
@@ -256,19 +264,19 @@ namespace boost
 
 #ifdef BOOST_THREAD_USES_CHRONO
           template <class Rep, class Period>
-          inline void sleep_for(const chrono::duration<Rep, Period>& d)
+          void sleep_for(const chrono::duration<Rep, Period>& d)
           {
             non_interruptible_wait(detail::win32::invalid_handle_value, detail::internal_platform_clock::now() + detail::platform_duration(d));
           }
 
           template <class Duration>
-          inline void sleep_until(const chrono::time_point<chrono::steady_clock, Duration>& t)
+          void sleep_until(const chrono::time_point<chrono::steady_clock, Duration>& t)
           {
             sleep_for(t - chrono::steady_clock::now());
           }
 
           template <class Clock, class Duration>
-          inline void sleep_until(const chrono::time_point<Clock, Duration>& t)
+          void sleep_until(const chrono::time_point<Clock, Duration>& t)
           {
             typedef typename common_type<Duration, typename Clock::duration>::type common_duration;
             common_duration d(t - Clock::now());
